@@ -30,7 +30,7 @@ grunt.initConfig({
       prefix: 'myapp',
       loadLibraries: ['yourapp/YourApp', 'hisapp/HisApp'],
       ignore: ['r']
-    }]
+    }
   }
 });
 ```
