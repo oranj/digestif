@@ -35,6 +35,16 @@ module.exports = function(grunt) {
 		writeFile(outputFilePath, str);
 	});
 
+
+	grunt.registerTask('digestif-clean', "Removes the digest file", function(target) {
+
+		var data = grunt.config('digestif')[target],
+			outputFilePath = data.path + '/' + target + ".js";
+
+		removeFile(outputFilePath);
+	});
+
+
 	var fs = require('fs'),
 		argIndex,
 		functionArgs,
