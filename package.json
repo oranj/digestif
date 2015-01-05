@@ -1,7 +1,7 @@
 {
   "name": "grunt-digestif",
   "description": "Creates a heirarchical digest of a folder using AMD for uncompiled library loading.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "homepage": "https://github.com/oranj/digestif",
   "author": {
     "name": "Ray Minge",
