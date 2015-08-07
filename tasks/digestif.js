@@ -68,30 +68,6 @@ module.exports = function(grunt) {
 			}
 		}
 
-		for (i = 0; i < files.length; i++) {
-			if (skipFiles.indexOf(files[i]) >= 0) {
-				grunt.verbose.writeln("Skipping file: " + path + '/' + files[i]);
-				continue;
-			}
-			if (count > 0) {
-				bodyString += ",";
-			}
-			argName = "a"+String(argIndex);
-			functionArgs.push(argName),
-			functionDefines.push(defNamePrefix + "/" + files[i]);
-			bodyString += pathPrefix + files[i] + ":"+argName;
-			argIndex++;
-			count ++;
-		}
-		for (i = 0; i < dirs.length; i++) {
-			if (count > 0) {
-				bodyString += ",";
-			}
-			bodyString += pathPrefix + dirs[i] + ": {";
-			digestRecursive(path + "/" + dirs[i], defNamePrefix + "/" + dirs[i], pathPrefix + "\t", [], skipFiles);
-			bodyString += pathPrefix + "}";
-			count++;
-		}
 
 		for (var i = 0; i < postLoadLibraries.length; i++) {
 			if (count > 0) {
@@ -107,6 +83,50 @@ module.exports = function(grunt) {
 			argIndex++;
 			count++;
 		}
+
+
+		for (i = 0; i < files.length; i++) {
+			if (skipFiles.indexOf(files[i]) >= 0) {
+				grunt.verbose.writeln("Skipping file: " + path + '/' + files[i]);
+				continue;
+			}
+			if (count > 0) {
+				bodyString += ",";
+			}
+			argName = "a"+String(argIndex);
+			functionArgs.push(argName),
+			functionDefines.push(defNamePrefix + "/" + files[i]);
+			bodyString += pathPrefix + files[i] + ":"+argName;
+			argIndex++;
+			count ++;
+		}
+
+
+		for (i = 0; i < dirs.length; i++) {
+			if (count > 0) {
+				bodyString += ",";
+			}
+			bodyString += pathPrefix + dirs[i] + ": {";
+			digestRecursive(path + "/" + dirs[i], defNamePrefix + "/" + dirs[i], pathPrefix + "\t", [], skipFiles);
+			bodyString += pathPrefix + "}";
+			count++;
+		}
+
+/*
+		for (var i = 0; i < postLoadLibraries.length; i++) {
+			if (count > 0) {
+				bodyString += ",";
+			}
+
+			argName = "a" +String(argIndex);
+			libName = postLoadLibraries[i].split('/');
+			libName = libName[libName.length - 1];
+			functionArgs.push(argName);
+			functionDefines.push(postLoadLibraries[i]);
+			bodyString += pathPrefix + libName + ":" + argName;
+			argIndex++;
+			count++;
+		} */
 	};
 
 	removeFile = function(fileName) {
