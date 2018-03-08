@@ -9,25 +9,16 @@
 module.exports = function(grunt) {
 	'use strict';
 
+	var fs = require('fs');
+
 	grunt.registerMultiTask('digestif', 'Creates a heirarchical digest of a folder using AMD for uncompiled library loading.', function() {
 
-		var path = this.data.path,
-			outputName = this.target,
-			postLoadLibraries = this.data.loadLibraries || [],
-			skipFiles = this.data.ignore || [],
-			prefix = this.data.prefix,
-			outputFilePath = path + '/' + outputName + ".js";
+		var outputFilePath = this.data.path + '/' + this.target + ".js";
+
+		let digestif = new Digestif( this.data, this.target );
+		var str = digestif.build();
 
 		removeFile(outputFilePath);
-
-		argIndex = 0;
-		functionDefines = [];
-		bodyString = "\treturn {";
-		functionArgs = [];
-		digestRecursive(path, prefix, "\n\t\t", postLoadLibraries, skipFiles);
-		bodyString += "\n\t};";
-
-		var str = "define([\""+functionDefines.join("\",\"")+"\"], function("+functionArgs.join(",")+"){\n\t\"use strict\";\n"+bodyString+"\n});\n";
 
 		grunt.log.writeln("Writing file:" + outputFilePath);
 		grunt.verbose.writeln(str);
@@ -35,108 +26,103 @@ module.exports = function(grunt) {
 		writeFile(outputFilePath, str);
 	});
 
-
 	grunt.registerTask('digestif-clean', "Removes the digest file", function(target) {
-
 		var data = grunt.config('digestif')[target],
 			outputFilePath = data.path + '/' + target + ".js";
 
 		removeFile(outputFilePath);
 	});
 
+	function Digestif( config, target ) {
+		if ( config.ignore === undefined ) {
+			config.ignore = [];
+		}
+		if ( config.loadLibraries === undefined ) {
+			config.loadLibraries = [];
+		}
+		config.ignore.push( target );
 
-	var fs = require('fs'),
-		argIndex,
-		functionArgs,
-		functionDefines,
-		bodyString, digestRecursive, removeFile, writeFile, digest;
+		this.build = function() {
+			return 'define(function( require ) {\n\t"use strict";\n\treturn {' +
+				buildRecursive( config.path, config.prefix, "\n\t\t" ) +
+				'\n\t};\n});\n';
+		};
 
-	digestRecursive = function(path, defNamePrefix, pathPrefix, postLoadLibraries, skipFiles) {
-		var contents = fs.readdirSync(path),
-			libName, modName, count = 0, argName,
-			i, fullPath, packagePath, stats, dirs = [], files = [];
-
-		for (i = 0; i < contents.length; i++) {
-			if (contents[i].charAt(0) == '.') {
-				continue;
+		function getPathContents( path ) {
+			let contents = fs.readdirSync( path );
+			let dirs = [];
+			let modName;
+			let stats;
+			let files = [];
+			for( let i = 0; i < contents.length; i++ ) {
+				if ( contents[ i ].charAt( 0 ) == '.' ) {
+					continue; // skip hidden
+				}
+				stats = fs.statSync( path + '/' + contents[ i ]);
+				if ( stats.isDirectory() ) {
+					dirs.push( contents[ i ] );
+				} else if ( modName = contents[ i ].match(/^(.*?)\.js$/)) {
+					files.push( modName[ 1 ]);
+				}
 			}
-			stats = fs.statSync(path + '/' + contents[i]);
-			if (stats.isDirectory()) {
-				dirs.push(contents[i]);
-			} else if (modName = contents[i].match(/^(.*?)\.js$/)) {
-				files.push(modName[1]);
-			}
+			return { dirs, files };
 		}
 
-
-		for (var i = 0; i < postLoadLibraries.length; i++) {
-			if (count > 0) {
-				bodyString += ",";
+		function buildLoadLibraries( pathPrefix ) {
+			var parts = [];
+			for (var i = 0; i < config.loadLibraries.length; i++) {
+				argName = 'require( "' + config.loadLibraries[i] + '" )';
+				libName = config.loadLibraries[i].split('/').pop();
+				parts.push( pathPrefix + libName + ":" + argName );
 			}
-
-			argName = "a" +String(argIndex);
-			libName = postLoadLibraries[i].split('/');
-			libName = libName[libName.length - 1];
-			functionArgs.push(argName);
-			functionDefines.push(postLoadLibraries[i]);
-			bodyString += pathPrefix + libName + ":" + argName;
-			argIndex++;
-			count++;
+			return parts.join(',');
 		}
 
-
-		for (i = 0; i < files.length; i++) {
-			if (skipFiles.indexOf(files[i]) >= 0) {
-				grunt.verbose.writeln("Skipping file: " + path + '/' + files[i]);
-				continue;
+		function buildLoadFiles( files, defNamePrefix, pathPrefix ) {
+			var parts = [];
+			var argName;
+			for ( var i = 0; i < files.length; i++ ) {
+				if ( config.ignore.indexOf( files[ i ]) >= 0 ) {
+					grunt.verbose.writeln("Skipping file: " + pathPrefix + '/' + files[i]);
+					continue;
+				}
+				parts.push( pathPrefix + files[i] + ":" + 'require( "' + defNamePrefix + "/" + files[i] + '" )' );
 			}
-			if (count > 0) {
-				bodyString += ",";
-			}
-			argName = "a"+String(argIndex);
-			functionArgs.push(argName),
-			functionDefines.push(defNamePrefix + "/" + files[i]);
-			bodyString += pathPrefix + files[i] + ":"+argName;
-			argIndex++;
-			count ++;
+			return parts.join(',');
 		}
 
+		function buildRecursive( path, defNamePrefix, pathPrefix, depth = 1 ) {
+			let contents = fs.readdirSync(path);
+			let parts = [];
+			let i;
 
-		for (i = 0; i < dirs.length; i++) {
-			if (count > 0) {
-				bodyString += ",";
+
+			if ( depth === 1 && config.loadLibraries.length > 0 ) {
+				parts.push( buildLoadLibraries( pathPrefix ) );
 			}
-			bodyString += pathPrefix + dirs[i] + ": {";
-			digestRecursive(path + "/" + dirs[i], defNamePrefix + "/" + dirs[i], pathPrefix + "\t", [], skipFiles);
-			bodyString += pathPrefix + "}";
-			count++;
+
+			let { dirs, files } = getPathContents( path );
+
+			if ( files.length > 0 ) {
+				parts.push( buildLoadFiles( files, defNamePrefix, pathPrefix ));
+			}
+
+			for (i = 0; i < dirs.length; i++) {
+				parts.push( pathPrefix + dirs[i] + ": {" + buildRecursive(path + "/" + dirs[i], defNamePrefix + "/" + dirs[i], pathPrefix + "\t", depth++) + pathPrefix + '}' );
+			}
+			return parts.filter(function( v ) { return !!v; }).join(',');
 		}
+	}
 
-/*
-		for (var i = 0; i < postLoadLibraries.length; i++) {
-			if (count > 0) {
-				bodyString += ",";
-			}
 
-			argName = "a" +String(argIndex);
-			libName = postLoadLibraries[i].split('/');
-			libName = libName[libName.length - 1];
-			functionArgs.push(argName);
-			functionDefines.push(postLoadLibraries[i]);
-			bodyString += pathPrefix + libName + ":" + argName;
-			argIndex++;
-			count++;
-		} */
-	};
-
-	removeFile = function(fileName) {
+	function removeFile(fileName) {
 		if (fs.existsSync(fileName)) {
 			grunt.log.writeln("Removing file:" + fileName);
 			fs.unlinkSync(fileName);
 		}
 	};
 
-	writeFile = function(fileName, contents) {
+	function writeFile(fileName, contents) {
 		fs.writeFileSync(fileName, contents);
 	};
 
